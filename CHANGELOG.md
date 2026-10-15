@@ -2,6 +2,33 @@
 
 格式：日期 · 变更 · 原因。只记录有实际意义的阶段与决策。
 
+## 2026-10-15 晚 · 推理等级支持（用户反馈：选择器里没有推理等级）
+
+- **用户观察**：对话页右下角模型选择器里，插件模型没有“推理等级”，官方（pi-ai）路由有。
+- **根因**：v1 把「不支持 reasoning effort」设为硬边界——适配器对 effort fail-loud、
+  模型不声明档位，选择器自然不出现。但 pi-ai 对同一端点的真实行为是：**目录声明档位
+  （选择器出现）+ 线协议不发任何参数**（其 NVIDIA 条目 `supportsReasoningEffort: false`，
+  全部分支都不命中；glm 在该端点上默认自行思考）。
+- **实现（对齐 pi-ai 行为，档位声明改为部署知识）**：
+  - 目录条目新增可选 `efforts`（从低到高）与 `defaultEffort`（校验：非空唯一、
+    defaultEffort 必须属于 efforts）；`resolveModel` 投影为
+    `LlmResolvedModelInfo.reasoning` → 选择器出现推理等级；
+  - 档位校验与缺省物化由运行时统一负责（`resolveCallWithInfo`），适配器移除 v1 的
+    UNSUPPORTED_OPTION 守卫（信任 seam 契约）；
+  - 新配置 `reasoningEffortParam`：`none`（默认，档位只留在会话侧、请求字节不变——
+    与 pi-ai 对 NVIDIA 的已验证行为一致）| `reasoning_effort`（OpenAI 风格字段写进
+    请求体，供确实接受该参数的端点使用；被拒绝会显式 400）；
+  - 探测路由新增可选 `reasoningEffort` 请求字段（转发 `reasoning_effort`，可实测端点
+    是否接受；本轮 7 次探测因端点繁忙不可判，保留该能力供日后复测）；
+  - 客户端目录重建（发现/裁剪/恢复）**保留**已保存条目的 efforts/defaultEffort
+    （部署元数据不被端点列表覆盖）；
+  - 用户目录已预配：glm-5.3 与 glm-5.3-flash 各 `efforts: [off, minimal, low, medium,
+    high]`，glm-5.3 另配 `defaultEffort: high`（对齐其 pi-ai 用法）。
+- **迁移指引更新**：目标模型声明档位后，`reasoningEffort: high` **可以保留**（运行时校验），
+  不再要求删除。
+- 测试：73/73（70 + 3：档位校验/reasoningEffortParam 校验/resolveModel 声明；
+  适配器 effort 测试改写为线协议行为断言）。
+
 ## 2026-10-15 13:23 · 独立 Git 仓库建立并打 v0.1.0 标签
 
 - 项目目录 `git init`（master 分支；仓库本地身份 `liang <liang@localhost>`，未动全局配置）；

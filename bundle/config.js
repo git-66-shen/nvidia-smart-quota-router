@@ -75,6 +75,14 @@ export const Config = z.object({
     description: z.string(),
     contextWindow: z.number().step(1).min(1),
     maxTokens: z.number().step(1).min(1),
+    // Selectable reasoning efforts for this exact model, ordered least to
+    // greatest. Declared per model because the endpoint's /models listing
+    // carries no reasoning metadata — which models reason, and at which
+    // levels, is deployment knowledge the catalog owner states here.
+    efforts: z.array(z.string()).role('table'),
+    // The effort materialized into requests when a caller selects none;
+    // must be one of `efforts`. Absence keeps the provider's own default.
+    defaultEffort: z.string(),
   })).default(DEFAULT_MODELS).volatile(),
   windowMs: z.number().step(1).min(1).default(60_000).volatile(),
   safeThreshold: z.number().step(1).min(1).default(38).volatile(),
@@ -89,6 +97,13 @@ export const Config = z.object({
   streamUsage: z.boolean().default(true).volatile(),
   enableStatusTool: z.boolean().default(true).volatile(),
   retryPolicy: RetryPolicySchema.volatile(),
+  // How an accepted reasoning effort reaches the wire. 'none' matches the
+  // pi-ai catalog's curated verdict that this endpoint ignores effort
+  // parameters (its NVIDIA entries set supportsReasoningEffort false), so the
+  // selection stays session-side metadata — identical bytes regardless of
+  // level. 'reasoning_effort' forwards the OpenAI-style field for endpoints
+  // that accept it; a rejecting endpoint then fails loud with its own 400.
+  reasoningEffortParam: z.string().default('none').volatile(),
 })
 
 /**
@@ -146,6 +161,39 @@ function resolveKeys(value) {
 }
 
 /**
+ * Validate one catalog entry's declared reasoning levels: non-empty unique ids
+ * (least-to-greatest is the caller's ordering responsibility), and a default
+ * must name one of the declared levels.
+ * @param {unknown} value - raw `efforts` field.
+ * @param {unknown} defaultEffort - raw `defaultEffort` field.
+ * @param {string} id - model id for diagnostics.
+ * @returns {{efforts?: string[], defaultEffort?: string}} the validated fields, omitted when absent.
+ */
+function resolveEfforts(value, defaultEffort, id) {
+  const where = `catalog model "${id}"`
+  if (value === undefined && defaultEffort === undefined) return {}
+  const raw = Array.isArray(value) ? value : []
+  if (raw.length === 0 && defaultEffort === undefined) return {}
+  if (raw.length === 0) {
+    throw new Error(`llm-nvidia-router: ${where} defaultEffort requires a non-empty efforts list`)
+  }
+  const efforts = raw.map((level) => {
+    if (typeof level !== 'string' || level.trim().length === 0) {
+      throw new Error(`llm-nvidia-router: ${where} efforts must be non-empty strings`)
+    }
+    return level.trim()
+  })
+  if (new Set(efforts).size !== efforts.length) {
+    throw new Error(`llm-nvidia-router: ${where} efforts must not repeat a level`)
+  }
+  if (defaultEffort === undefined) return { efforts }
+  if (typeof defaultEffort !== 'string' || !efforts.includes(defaultEffort.trim())) {
+    throw new Error(`llm-nvidia-router: ${where} defaultEffort must name one of the declared efforts`)
+  }
+  return { efforts, defaultEffort: defaultEffort.trim() }
+}
+
+/**
  * @param {unknown} value
  * @returns {object[]} validated catalog.
  */
@@ -170,6 +218,7 @@ function resolveModels(value) {
       ...typeof spec.description === 'string' && spec.description.length > 0 ? { description: spec.description } : {},
       ...contextWindow === undefined ? {} : { contextWindow },
       ...maxTokens === undefined ? {} : { maxTokens },
+      ...resolveEfforts(spec.efforts, spec.defaultEffort, id),
     }
   })
 }
@@ -204,6 +253,12 @@ export function resolveAdapterOptions(config, environment) {
   const allUnavailableWaitMs = positiveInt(config.allUnavailableWaitMs ?? 15_000, 'allUnavailableWaitMs', 0, 3_600_000)
   const streamIdleTimeoutMs = positiveInt(config.streamIdleTimeoutMs ?? 300_000, 'streamIdleTimeoutMs', 1, 2_147_483_000)
   const requestTimeoutMs = positiveInt(config.requestTimeoutMs ?? 120_000, 'requestTimeoutMs', 0, 2_147_483_000)
+  const reasoningEffortParam = typeof config.reasoningEffortParam === 'string' && config.reasoningEffortParam.length > 0
+    ? config.reasoningEffortParam
+    : 'none'
+  if (reasoningEffortParam !== 'none' && reasoningEffortParam !== 'reasoning_effort') {
+    throw new Error(`llm-nvidia-router: reasoningEffortParam must be "none" or "reasoning_effort", received ${JSON.stringify(reasoningEffortParam)}`)
+  }
   return {
     provider,
     providerName,
@@ -222,6 +277,7 @@ export function resolveAdapterOptions(config, environment) {
     requestTimeoutMs,
     streamUsage: config.streamUsage !== false,
     enableStatusTool: config.enableStatusTool !== false,
+    reasoningEffortParam,
     retryPolicy: resolveRetryPolicy(config.retryPolicy, 'llm-nvidia-router: retryPolicy'),
   }
 }

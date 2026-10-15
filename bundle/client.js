@@ -335,14 +335,28 @@ window.__ModuleLoader__.load({
 				return saved.length > 0 ? saved : DEFAULT_BASE_URL;
 			};
 
-			const toCatalog = (list) => list
-				.filter((model) => model !== null && typeof model === "object" && typeof model.id === "string" && model.id.length > 0)
-				.map((model) => ({
-					id: model.id,
-					name: typeof model.name === "string" && model.name.length > 0 ? model.name : model.id,
-					...(typeof model.contextWindow === "number" ? { contextWindow: model.contextWindow } : {}),
-					...(typeof model.maxTokens === "number" ? { maxTokens: model.maxTokens } : {}),
-				}));
+			// Endpoint listing → catalog rows. Per-model reasoning metadata
+			// (efforts/defaultEffort) is deployment-owned config the listing
+			// cannot know, so a matching saved row keeps its declared levels
+			// through every re-discovery instead of being wiped.
+			const toCatalog = (list, previous) => {
+				const saved = new Map((previous ?? [])
+					.filter((model) => model !== null && typeof model === "object" && typeof model.id === "string")
+					.map((model) => [model.id, model]));
+				return list
+					.filter((model) => model !== null && typeof model === "object" && typeof model.id === "string" && model.id.length > 0)
+					.map((model) => {
+						const prior = saved.get(model.id);
+						return {
+							id: model.id,
+							name: typeof model.name === "string" && model.name.length > 0 ? model.name : model.id,
+							...(typeof model.contextWindow === "number" ? { contextWindow: model.contextWindow } : {}),
+							...(typeof model.maxTokens === "number" ? { maxTokens: model.maxTokens } : {}),
+							...(Array.isArray(prior?.efforts) && prior.efforts.length > 0 ? { efforts: prior.efforts } : {}),
+							...(typeof prior?.defaultEffort === "string" && prior.defaultEffort.length > 0 ? { defaultEffort: prior.defaultEffort } : {}),
+						};
+					});
+			};
 
 			// One bounded pass over the given ids; the Host answers with ids, verdicts,
 			// and milliseconds only — never a key.
@@ -395,7 +409,7 @@ window.__ModuleLoader__.load({
 						setDiscoverOutcome({ kind: "error", message: response.error?.message ?? response.error?.code ?? "refused" });
 						return;
 					}
-					const catalog = toCatalog(Array.isArray(response.value) ? response.value : []);
+					const catalog = toCatalog(Array.isArray(response.value) ? response.value : [], state.value?.models);
 					setFullCatalog(catalog);
 					setDiscoverOutcome({ kind: "ok", count: catalog.length });
 					if (catalog.length === 0) return;

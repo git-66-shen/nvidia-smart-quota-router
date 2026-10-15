@@ -34,6 +34,25 @@ function catalogModelInfo(options, provider, entry) {
 }
 
 /**
+ * One catalog entry's declared reasoning levels as the harness picker
+ * consumes them: capitalized display names over the declared ids.
+ * @param {object} entry - one catalog model with optional `efforts`.
+ * @returns {object} the `reasoning` field, or an empty object when none are declared.
+ */
+function reasoningInfoOf(entry) {
+  if (entry.efforts === undefined) return {}
+  return {
+    reasoning: {
+      efforts: entry.efforts.map(level => ({
+        id: level,
+        name: level.charAt(0).toUpperCase() + level.slice(1),
+      })),
+      ...(entry.defaultEffort === undefined ? {} : { defaultEffort: entry.defaultEffort }),
+    },
+  }
+}
+
+/**
  * @param {object} options - resolved settings snapshot.
  * @param {string} provider
  * @param {string} model
@@ -52,6 +71,7 @@ function resolveModelInfo(options, provider, model) {
     inputModalities: ['text'],
     ...entry.contextWindow !== undefined ? { context: { contextWindow: entry.contextWindow } } : {},
     ...entry.maxTokens !== undefined ? { defaultMaxTokens: entry.maxTokens } : {},
+    ...reasoningInfoOf(entry),
   }
 }
 
@@ -98,14 +118,14 @@ export class NvidiaRouterAdapter extends LlmAdapter {
    * Stream one model call with bounded key failover. Each HTTP attempt
    * reserves quota atomically through the shared scheduler; only failures
    * that arrive before any stream chunk has been delivered may try another
-   * key, and only a bounded number of times.
+   * key, and only a bounded number of times. A reasoningEffort here was
+   * already validated (and defaulted) by the runtime against the model's
+   * declared levels; whether the wire carries it is the configured
+   * `reasoningEffortParam` deployment fact.
    * @param {object} options - GenerateOptions.
    * @returns {AsyncGenerator<object>} raw StreamChunk values.
    */
   async *stream(options) {
-    if (options.reasoningEffort !== undefined) {
-      throw new LlmError(`${PKG}: reasoningEffort is not supported by this adapter; remove it from the request`, 'UNSUPPORTED_OPTION')
-    }
     const connection = this.#options()
     let attempts = 0
     while (true) {

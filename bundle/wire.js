@@ -106,6 +106,14 @@ export function serializeRequest(options, connection, apiKey) {
   if (typeof options.temperature === 'number') body.temperature = options.temperature
   if (typeof options.maxTokens === 'number') body.max_tokens = options.maxTokens
   if (Array.isArray(options.stop) && options.stop.length > 0) body.stop = options.stop
+  // The runtime validated the effort against the model's declared levels before
+  // dispatch. Whether the wire carries it at all is a deployment fact: 'none'
+  // matches the pi-ai catalog's verdict that this endpoint ignores effort
+  // parameters; 'reasoning_effort' forwards the OpenAI-style field.
+  if (connection.reasoningEffortParam === 'reasoning_effort'
+    && typeof options.reasoningEffort === 'string' && options.reasoningEffort.length > 0) {
+    body.reasoning_effort = options.reasoningEffort
+  }
   return {
     url: `${connection.baseURL.replace(/\/+$/u, '')}/chat/completions`,
     headers: {

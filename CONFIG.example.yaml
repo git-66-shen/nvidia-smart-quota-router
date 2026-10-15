@@ -43,6 +43,13 @@
         name: Llama 3.3 70B Instruct (NVIDIA)
         contextWindow: 131072
         maxTokens: 8192
+      # 可选：声明推理档位（从低到高）后，对话页模型选择器出现“推理等级”；
+      # defaultEffort 是未选择时的默认档（必须属于 efforts）。是否把档位发到
+      # 端点由下面的 reasoningEffortParam 决定。
+      - id: z-ai/glm-5.3
+        name: GLM 5.3 (NVIDIA)
+        efforts: [off, minimal, low, medium, high]
+        defaultEffort: high
 
     # ---- sticky_quota 调度（全部可调） ----
     # 参考值：RPM 40（用户提供的服务端参考值，不是服务端保证）。
@@ -66,6 +73,10 @@
     # ---- 其他 ----
     streamUsage: true             # 请求 stream_options.include_usage 以获得 token 用量
     enableStatusTool: true        # 注册 nvidia_quota_status 只读诊断工具
+    # 推理档位的线协议下发方式：none（默认，档位只留在会话侧——与 pi-ai 目录对
+    # NVIDIA 端点的策展一致）| reasoning_effort（把 OpenAI 风格字段写进请求体，
+    # 适合确实接受该参数的端点；被拒绝会显式报错）。
+    reasoningEffortParam: none
 
     # 步级重试策略（dsh-llm-retry 执行；省略=normal 模式 5 次，可重试码
     # EMPTY_RESPONSE/RATE_LIMIT/SERVER/TIMEOUT/TRANSPORT）：

@@ -73,16 +73,24 @@ async function errorCodeOf(response) {
  * @param {string} init.model - model id to probe.
  * @param {string} init.baseURL - endpoint root, already trimmed.
  * @param {string} init.key - resolved credential value (never returned).
+ * @param {string} [init.reasoningEffort] - optional OpenAI-style effort id to
+ * include as `reasoning_effort`, testing whether the model accepts it.
  * @param {AbortSignal} init.signal - caller cancellation bound to the deadline.
  * @returns {Promise<object>} one probe result.
  */
-async function probeModel({ model, baseURL, key, signal }) {
+async function probeModel({ model, baseURL, key, reasoningEffort, signal }) {
   const started = performance.now()
   try {
     const response = await fetch(`${baseURL}/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...attributionHeaders(), authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1, stream: false }),
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1,
+        stream: false,
+        ...(reasoningEffort === undefined ? {} : { reasoning_effort: reasoningEffort }),
+      }),
       signal,
     })
     const latencyMs = Math.round(performance.now() - started)
@@ -118,9 +126,23 @@ async function mapWithConcurrency(items, limit, worker) {
 }
 
 /**
+ * An optional probe-request extension: one reasoning effort id forwarded to the
+ * endpoint's OpenAI-style `reasoning_effort` field, so a probe can answer
+ * whether the served model accepts the parameter at all.
+ * @param {unknown} body - decoded request body.
+ * @returns {string | undefined} a validated effort id, or undefined.
+ */
+function requestedReasoningEffort(body) {
+  if (typeof body !== 'object' || body === null) return undefined
+  const effort = body.reasoningEffort
+  return typeof effort === 'string' && effort.length > 0 ? effort : undefined
+}
+
+/**
  * POST /api/nvidia-router.probe: latency-test each requested model (default:
  * the whole catalog) against the configured endpoint through the first key
- * that currently resolves.
+ * that currently resolves. An optional `reasoningEffort` body field forwards
+ * one OpenAI-style effort so a probe can test whether the model accepts it.
  * @param {object} init
  * @param {Request} init.request - the inbound request.
  * @param {() => object} init.options - live resolved settings.
@@ -131,6 +153,7 @@ export async function handleProbe({ request, options, resolveAnyKey }) {
   const snapshot = options()
   const body = await request.json().catch(() => null)
   const requested = requestedModels(body)
+  const reasoningEffort = requestedReasoningEffort(body)
   const models = requested.length > 0 ? requested : snapshot.models.map((entry) => entry.id)
   if (models.length === 0) {
     return jsonResponse({
@@ -151,9 +174,10 @@ export async function handleProbe({ request, options, resolveAnyKey }) {
   // it, which would report a large catalog as mostly "undetermined". Caller
   // cancellation still applies to every probe.
   const results = await mapWithConcurrency(models, PROBE_CONCURRENCY, (model) => probeModel({
-    model, baseURL, key, signal: AbortSignal.any([request.signal, AbortSignal.timeout(PROBE_TIMEOUT_MS)]),
+    model, baseURL, key, reasoningEffort,
+    signal: AbortSignal.any([request.signal, AbortSignal.timeout(PROBE_TIMEOUT_MS)]),
   }))
-  return jsonResponse({ testedAt: Date.now(), baseURL, results })
+  return jsonResponse({ testedAt: Date.now(), baseURL, ...(reasoningEffort === undefined ? {} : { reasoningEffort }), results })
 }
 
 /**

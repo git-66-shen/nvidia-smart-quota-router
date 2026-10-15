@@ -145,9 +145,16 @@ acquire(model, signal):
 3. NVIDIA 端点细节（Retry-After 格式、stream_options、模型 id）按 OpenAI 兼容规范实现，真机首验前标记未测试。
 4. `temperature`/`max_tokens`/`stop` 之外的采样参数（top_p、response_format 等）不在 DSH 请求词汇表中，不做透传也不伪造。
 5. 多 choice 响应只取 `choices[0]`（DSH 请求不使用 n>1）。
-6. 不支持 reasoning effort：模型不声明 efforts，携带 `reasoningEffort` 的请求在准备期或适配器内
-   fail-loud（UNSUPPORTED_OPTION），不静默丢弃。迁移自 pi-ai `nvidia` 路由（默认模型
-   `z-ai/glm-5.3` 带 `reasoningEffort: high`）时必须删除该字段（见 README 迁移节）。
+6. 推理档位（2026-10-15 起，替代原「不支持 reasoning effort」边界）：模型是否支持推理、
+   支持哪些档位是**部署知识**，由目录条目的 `efforts`（从低到高）与 `defaultEffort` 声明
+   （端点 /models 列表不含该元数据；glm-5.3 / glm-5.3-flash 已在用户目录预配）。
+   `resolveModel` 把声明投影为 `LlmResolvedModelInfo.reasoning`，选择器因此出现推理等级；
+   档位的校验与缺省物化由运行时统一负责（`resolveCallWithInfo`：越界档位与未声明模型的
+   显式档位都以 `UNSUPPORTED_REASONING_EFFORT` 拒绝）。线协议是否携带档位由
+   `reasoningEffortParam` 决定：默认 `none`——与 pi-ai 目录对该端点的策展一致
+   （NVIDIA 条目 `supportsReasoningEffort: false`，pi-ai 对 NVIDIA 实际不发任何 effort
+   参数，档位只是会话侧元数据，glm 在该端点上默认自行思考）；`reasoning_effort` 则把
+   OpenAI 风格字段写进请求体（端点若拒绝会显式 400，可随时改回）。
 
 ## 8. 安装与激活实录（2026-10-14，阶段 3 实测）
 

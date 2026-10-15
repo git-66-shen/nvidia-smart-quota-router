@@ -492,13 +492,31 @@ test('adapter: reasoning_content deltas assemble into a reasoning block', async 
   }
 })
 
-test('adapter: an unsupported reasoningEffort fails loud instead of being dropped', async () => {
-  const mock = await startMockNvidia()
+test('adapter: a runtime-validated reasoningEffort rides the request per reasoningEffortParam', async () => {
+  const mock = await startMockNvidia({
+    behaviors: { [KEY_VALUES.NVIDIA_API_KEY_1]: { behavior: 'ok', script: greetingStream() } },
+  })
   try {
-    const { adapter } = buildAdapter(mock)
-    const outcome = await collect(adapter, chatRequest(['effort probe'], { reasoningEffort: 'high' }))
-    assert.ok(outcome.error instanceof LlmError && outcome.error.code === 'UNSUPPORTED_OPTION')
-    assert.equal(mock.requests.length, 0, 'no request was sent')
+    // Default 'none': the effort stays session-side metadata, exactly the
+    // bytes pi-ai sends for this endpoint (its catalog marks the NVIDIA
+    // route as ignoring effort parameters), and the request succeeds.
+    const quiet = buildAdapter(mock)
+    const quietOutcome = await collect(quiet.adapter, chatRequest(['effort probe'], { reasoningEffort: 'high' }))
+    assert.equal(quietOutcome.error, undefined)
+    assert.equal(quietOutcome.finish.reason.kind, 'stop')
+    assert.equal(mock.requests[0].body.reasoning_effort, undefined,
+      'the default param mode never writes reasoning_effort')
+
+    // 'reasoning_effort': the OpenAI-style field rides the body verbatim.
+    const forwarding = buildAdapter(mock, { reasoningEffortParam: 'reasoning_effort' })
+    const forwardOutcome = await collect(forwarding.adapter, chatRequest(['effort probe'], { reasoningEffort: 'medium' }))
+    assert.equal(forwardOutcome.error, undefined)
+    assert.equal(mock.requests[1].body.reasoning_effort, 'medium')
+
+    // An absent effort sends nothing in either mode.
+    const absent = await collect(buildAdapter(mock, { reasoningEffortParam: 'reasoning_effort' }).adapter, chatRequest(['plain']))
+    assert.equal(absent.error, undefined)
+    assert.equal(mock.requests[2].body.reasoning_effort, undefined)
   } finally {
     await mock.close()
   }

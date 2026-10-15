@@ -93,6 +93,20 @@ DSH 的设置界面由插件自己注册页面。本插件附带客户端配置�
 **红** = 未配置任何 Key 或全部不可用；**黄** = 部分 Key 冷却/异常，或已存储但尚未产生成功请求（未验证）；
 **绿** = 已配置的 Key 全部可用且已有成功请求。悬停可见每个 Key 的标签/引用名与状态。
 
+**推理等级（2026-10-15 起）**：模型条目可声明 `efforts`（可选档位，从低到高）与
+`defaultEffort`（未选择时的默认档）——声明后对话页右下角的模型选择器就会出现
+**推理等级**选择（与 pi-ai 官方路由同款交互）。两个层面要分清：
+
+- **会话层**：选择器选的档位由 DSH 运行时校验（必须在声明列表内）并物化进请求；
+- **线协议层**：是否把档位发给端点是部署事实——`reasoningEffortParam` 默认 `none`
+  （与 pi-ai 目录对该端点的策展结论一致：NVIDIA integrate API 忽略 effort 参数，
+  选择只留在会话侧、不改变请求字节）；若你的端点接受 OpenAI 风格参数，把
+  `reasoningEffortParam: reasoning_effort` 配上即可真实下发（端点若拒绝会显式报错，可随时改回）。
+- glm-5.3 / glm-5.3-flash 两条目已预配 `efforts: [off, minimal, low, medium, high]`
+  （glm-5.3 另配 `defaultEffort: high`）；「获取模型列表」重新发现时**保留**已声明的档位。
+- 注意：模块热重载/重启都会清零调度器计数（与重启语义一致），健康徽标随之短暂回黄，
+  下一次成功请求后转绿。
+
 注意事项：
 
 - 路由 id 在页面中只读显示（固定 `nvidia-router`，防误改造成冲突/失效）；
@@ -127,9 +141,12 @@ DSH 的设置界面由插件自己注册页面。本插件附带客户端配置�
 1. 先把 Key 配到本路由（上节，数量不限）；并把目标模型加入本插件 `models` 目录
    （已实测：`z-ai/glm-5.3-flash` 可用且 398ms；`z-ai/glm-5.3` 探测超时、保留「未确定」——
    若坚持用它，迁移后先发一两条短消息确认 120s 流式预算下能出首块）。
+   两个 glm 条目已预配推理档位（`efforts` + glm-5.3 的 `defaultEffort: high`）。
 2. 把 `cordis.patch.yml` 里 `agent-default-model` 行改为
-   `provider: nvidia-router`、`model: z-ai/glm-5.3-flash`（或你选定的模型），并**删除 `reasoningEffort: high`**
-   （本 v1 适配器不支持 reasoning effort，保留该字段会在请求准备期报 UNSUPPORTED_OPTION/校验错）。
+   `provider: nvidia-router`、`model: z-ai/glm-5.3-flash`（或你选定的模型）。
+   **`reasoningEffort: high` 现在可以保留**——只要目标模型条目声明了包含 `high` 的
+   `efforts`（glm 两条已配好），运行时会校验并物化；线协议是否下发由
+   `reasoningEffortParam` 决定（默认不下发，见上节）。
 3. 保留 `llm-pi-ai` 行不动（回滚时直接把 agent-default-model 改回 `provider: nvidia` 即可）。
 
 注意：NVIDIA 对同一账号族的 Key 可能共享限流（合规声明见你提供的规则文件）；

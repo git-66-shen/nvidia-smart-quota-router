@@ -94,6 +94,69 @@ test('wiring: the resolver re-validates values that bypassed the schema', () => 
   assert.throws(() => resolveAdapterOptions({ apiKeys, baseURL: 'ftp://x/y?z' }, undefined), /HTTP\(S\) root/)
 })
 
+test('wiring: catalog reasoning levels validate and a default must name a declared level', () => {
+  const apiKeys = [{ env: 'NVIDIA_API_KEY_1' }]
+  const declared = resolveAdapterOptions({
+    apiKeys,
+    models: [{ id: 'glm', efforts: ['off', 'low', 'high'], defaultEffort: 'high' }],
+  }, undefined)
+  assert.deepEqual(declared.models[0].efforts, ['off', 'low', 'high'])
+  assert.equal(declared.models[0].defaultEffort, 'high')
+
+  const undeclared = resolveAdapterOptions({ apiKeys, models: [{ id: 'm' }] }, undefined)
+  assert.equal(undeclared.models[0].efforts, undefined)
+  assert.equal(undeclared.models[0].defaultEffort, undefined)
+
+  assert.throws(() => resolveAdapterOptions({
+    apiKeys, models: [{ id: 'glm', efforts: ['low', 'low'] }],
+  }, undefined), /must not repeat a level/)
+  assert.throws(() => resolveAdapterOptions({
+    apiKeys, models: [{ id: 'glm', efforts: ['low'], defaultEffort: 'high' }],
+  }, undefined), /defaultEffort must name one of the declared efforts/)
+  assert.throws(() => resolveAdapterOptions({
+    apiKeys, models: [{ id: 'glm', defaultEffort: 'high' }],
+  }, undefined), /defaultEffort requires a non-empty efforts list/)
+  assert.throws(() => resolveAdapterOptions({
+    apiKeys, models: [{ id: 'glm', efforts: [''] }],
+  }, undefined), /efforts must be non-empty strings/)
+})
+
+test('wiring: reasoningEffortParam accepts only none and reasoning_effort', () => {
+  const apiKeys = [{ env: 'NVIDIA_API_KEY_1' }]
+  const base = { apiKeys, models: [{ id: 'm' }] }
+  assert.equal(resolveAdapterOptions(base, undefined).reasoningEffortParam, 'none')
+  assert.equal(
+    resolveAdapterOptions({ ...base, reasoningEffortParam: 'reasoning_effort' }, undefined).reasoningEffortParam,
+    'reasoning_effort',
+  )
+  assert.throws(
+    () => resolveAdapterOptions({ ...base, reasoningEffortParam: 'chat_template_kwargs' }, undefined),
+    /reasoningEffortParam must be "none" or "reasoning_effort"/,
+  )
+})
+
+test('wiring: resolveModel declares selectable reasoning levels for catalog entries that state them', async () => {
+  const mock = await startMockNvidia()
+  try {
+    const { ctx, calls } = fakeContext()
+    apply(ctx, parsedConfig({
+      baseURL: mock.baseURL,
+      models: [{ id: 'glm-5.3', name: 'GLM 5.3', efforts: ['off', 'low', 'medium', 'high'], defaultEffort: 'high' }],
+    }))
+    const adapter = calls.adapters[0].adapter
+
+    const resolved = await adapter.resolveModel('nvidia-router', 'glm-5.3')
+    assert.deepEqual(resolved.reasoning.efforts.map(effort => effort.id), ['off', 'low', 'medium', 'high'])
+    assert.equal(resolved.reasoning.efforts[3].name, 'High')
+    assert.equal(resolved.reasoning.defaultEffort, 'high')
+
+    const undeclared = await adapter.resolveModel('nvidia-router', 'someone/new-model')
+    assert.equal(undeclared.reasoning, undefined, 'unlisted models declare no reasoning levels')
+  } finally {
+    await mock.close()
+  }
+})
+
 test('wiring: baseURL falls back to NVIDIA_BASE_URL from the launch environment', () => {
   const environment = { get: ref => (ref === 'NVIDIA_BASE_URL' ? { value: 'https://proxy.example.test/v1' } : undefined) }
   const resolved = resolveAdapterOptions({ apiKeys: [{ env: 'NVIDIA_API_KEY_1' }], models: [{ id: 'm' }] }, environment)
