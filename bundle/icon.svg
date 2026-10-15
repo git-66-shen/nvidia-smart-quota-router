@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Original artwork: a quota router glyph — one inbound arrow routed over
+       four key slots, with a rolling-window dial. -->
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="#1b2a41"/>
+  <g fill="none" stroke="#76b900" stroke-width="3" stroke-linecap="round">
+    <path d="M12 32 h14"/>
+    <path d="M26 32 a6 6 0 0 1 6 6 v6"/>
+    <path d="M26 32 a6 6 0 0 0 6 -6 v-6"/>
+    <path d="M12 24 l-6 8 6 8" transform="translate(6 0)"/>
+  </g>
+  <g fill="none" stroke="#e8eef5" stroke-width="2.5" stroke-linecap="round">
+    <circle cx="46" cy="18" r="6"/>
+    <path d="M46 12 v-3 M46 24 v-3 M52 18 h3 M40 18 h3"/>
+  </g>
+  <g fill="#76b900">
+    <rect x="38" y="32" width="8" height="8" rx="2"/>
+    <rect x="50" y="32" width="8" height="8" rx="2" opacity="0.45"/>
+    <rect x="38" y="44" width="8" height="8" rx="2" opacity="0.45"/>
+    <rect x="50" y="44" width="8" height="8" rx="2" opacity="0.45"/>
+  </g>
+</svg>

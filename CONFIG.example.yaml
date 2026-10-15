@@ -1,0 +1,78 @@
+# CONFIG.example.yaml — NVIDIA Smart Quota Router 配置样例（不含任何真实 Key）
+#
+# 用法：本插件以 DSH bundle 形式安装（见 README.md）。安装后，把下面
+# `- id: llm-nvidia-router` 的整个条目复制到当前 profile 的
+# cordis.patch.yml（web profile 默认位于 ~/.dsh/profiles/web/）即可覆盖
+# 默认配置；也可以只改个别字段——注意 patch 语义是“整行 config 替换”，
+# 所以拷贝时请带上需要保留的全部字段。
+#
+# 密钥 NEVER 写进本文件或任何源码：
+#   1. 推荐用 Web 界面 Models 页保存（写入 credentials 服务）；
+#   2. 或在启动环境中导出 NVIDIA_API_KEY_1..4 环境变量。
+# 只配置“引用名”（env 字段），插件运行时按引用解析，且引用名可自定义，
+# Key 数量可增减（不必是 4 个）。
+
+- id: llm-nvidia-router            # bundle 自带行已用此 id；覆盖时保持一致
+  name: '@local/dsh-llm-nvidia-router'
+  config:
+    provider: nvidia-router        # provider 路由 id；默认取 nvidia-router（nvidia 已被基础 profile 的 pi-ai 目录占用）
+    providerName: "NVIDIA (Quota Router)"  # 显示名（与 pi-ai 自带的 nvidia 目录区分）
+
+    # 端点：默认 NVIDIA 官方 OpenAI 兼容地址；也可用环境变量 NVIDIA_BASE_URL 覆盖
+    # baseURL: https://integrate.api.nvidia.com/v1
+
+    # Key 表：数量任意；label 只用于日志/状态的脱敏显示
+    apiKeys:
+      - env: NVIDIA_API_KEY_1
+        label: Key-1
+      - env: NVIDIA_API_KEY_2
+        label: Key-2
+      - env: NVIDIA_API_KEY_3
+        label: Key-3
+      - env: NVIDIA_API_KEY_4
+        label: Key-4
+
+    # 模型目录：id 必须与 NVIDIA 托管目录一致（可在 build.nvidia.com 查询，
+    # 也可在 Web Models 页用“发现模型”从端点拉取）。所有字段均可改。
+    models:
+      - id: deepseek-ai/deepseek-v3.1
+        name: DeepSeek V3.1 (NVIDIA)
+        contextWindow: 131072     # 建议值：上下文窗口（token）
+        maxTokens: 8192           # 建议值：单次输出上限（token）
+      - id: meta/llama-3.3-70b-instruct
+        name: Llama 3.3 70B Instruct (NVIDIA)
+        contextWindow: 131072
+        maxTokens: 8192
+
+    # ---- sticky_quota 调度（全部可调） ----
+    # 参考值：RPM 40（用户提供的服务端参考值，不是服务端保证）。
+    # 本地安全阈值取其 ~95%：38 次/滚动窗口。阈值是“本地预算”，
+    # 不是 NVIDIA 计数器的镜像；服务端真实限额可能不同（见 TECHNICAL_DESIGN.md）。
+    windowMs: 60000               # 滚动窗口长度（毫秒）
+    safeThreshold: 38             # 每 Key 每窗口的本地安全阈值
+    maxFailoverAttempts: 2       # 单次请求内，首块输出前最多换 Key 次数
+    allUnavailableWaitMs: 15000  # 所有 Key 均不可用时的有界等待（0=不等待）
+
+    # ---- 冷却策略（毫秒） ----
+    rateLimitCooldownMs: 5000     # 429 无 Retry-After 时的基础退避（指数递增）
+    rateLimitCooldownMaxMs: 300000
+    authErrorCooldownMs: 900000   # 401/403/缺凭据：标记 Key 配置异常的冷却
+    quotaCooldownMs: 1800000      # 402/配额文案：账户级配额冷却（可能跨 Key 共享）
+
+    # ---- 超时（毫秒） ----
+    requestTimeoutMs: 120000     # 单个 HTTP 请求整体截止（0=禁用）
+    streamIdleTimeoutMs: 300000   # 流式输出两个数据块之间的最大空闲
+
+    # ---- 其他 ----
+    streamUsage: true             # 请求 stream_options.include_usage 以获得 token 用量
+    enableStatusTool: true        # 注册 nvidia_quota_status 只读诊断工具
+
+    # 步级重试策略（dsh-llm-retry 执行；省略=normal 模式 5 次，可重试码
+    # EMPTY_RESPONSE/RATE_LIMIT/SERVER/TIMEOUT/TRANSPORT）：
+    # retryPolicy:
+    #   mode: normal
+    #   maxRetries: 5
+    #   backoff:
+    #     initialDelayMs: 500
+    #     maxDelayMs: 10000
+    #     jitterRatio: 0.1

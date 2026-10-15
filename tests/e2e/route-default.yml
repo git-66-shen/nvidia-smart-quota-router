@@ -1,0 +1,8 @@
+# E2E overlay: point a headless run's default model at the quota router.
+# Applied as a --patch overlay (ephemeral, per invocation); the profile's own
+# layers are untouched. Whole-config replacement for the row: provider + model
+# only, so no reasoningEffort rides along (the v1 adapter rejects it).
+- id: agent-default-model
+  config:
+    provider: nvidia-router
+    model: z-ai/glm-5.3-flash

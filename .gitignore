@@ -1,0 +1,5 @@
+# OS / editor droppings
+.DS_Store
+Thumbs.db
+*.swp
+*~

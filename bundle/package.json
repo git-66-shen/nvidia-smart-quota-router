@@ -1,0 +1,38 @@
+{
+  "name": "@local/dsh-llm-nvidia-router",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "NVIDIA API provider route for DeepSeek Harness with sticky multi-key quota scheduling, rolling-window safe thresholds, cooldown, and bounded failover.",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "config.js",
+    "scheduler.js",
+    "errors.js",
+    "wire.js",
+    "adapter.js",
+    "status.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
+    }
+  }
+}

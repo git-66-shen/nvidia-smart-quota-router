@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "NVIDIA Smart Quota Router",
+    "description": "NVIDIA API model provider with sticky multi-key quota scheduling: rolling-window safe thresholds, cooldown, and bounded failover shared by all main and subagent model calls."
+  }
+}

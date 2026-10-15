@@ -1,0 +1,9 @@
+# NVIDIA Smart Quota Router bundle patch: inserts the provider plugin row.
+# A profile's cordis.patch.yml may override this row by the same id; a patch
+# replaces the whole `config`, so copy the complete desired configuration
+# (see CONFIG.example.yaml) rather than editing single fields here.
+
+- insert:
+    - id: llm-nvidia-router
+      name: '@local/dsh-llm-nvidia-router'
+      config: {}

@@ -1,0 +1,12 @@
+# E2E overlay for the sticky-switch check: default model through the quota
+# router (same as route-default.yml) plus safeThreshold=2 on the router row,
+# so a handful of quick requests must visibly rotate the sticky key.
+# Whole-config replacement: every other field reverts to schema defaults
+# (4 default key refs, public endpoint fallback, windowMs 60s, threshold 2 here).
+- id: agent-default-model
+  config:
+    provider: nvidia-router
+    model: z-ai/glm-5.3-flash
+- id: llm-nvidia-router
+  config:
+    safeThreshold: 2
