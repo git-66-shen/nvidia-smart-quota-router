@@ -1,6 +1,6 @@
 # HANDOFF — NVIDIA Smart Quota Router（给下一个 DSH 对话窗口）
 
-上次更新：2026-10-15 11:45 (Asia/Shanghai)。恢复步骤：先读 PROJECT_STATUS.md →
+上次更新：2026-10-15 22:0x (Asia/Shanghai)。恢复步骤：先读 PROJECT_STATUS.md →
 TASK_CHECKLIST.md → TECHNICAL_DESIGN.md → TEST_REPORT.md，再从下面「下一步」继续。
 
 ## 当前项目阶段
@@ -84,6 +84,11 @@ inode）→ 原地重写 adapter.js（内容不变，`cp` 两次经过以真正�
 - **不要重写调度/适配器**（70 项测试通过 + 真机 e2e + GUI 实证）；改动后 `sh tests/run.sh` 全量回归。
 - **适配器必须继承 `LlmAdapter`**（`@deepseek-ai/dsh-llm`）：请求准备期走基类 `prepareCall`
   的同代绑定；构造器必须先 `super()`。不要改回鸭子类型裸类。
+- **推理档位（2026-10-15 起）**：目录条目 `efforts`/`defaultEffort` 是部署知识（端点列表
+  不含该元数据）；档位校验与缺省物化由运行时 `resolveCallWithInfo` 统一负责，适配器
+  **不要**再加自己的 effort 守卫；线协议由 `reasoningEffortParam` 决定（默认 none =
+  pi-ai 对该端点的已验证行为；`reasoning_effort` 供确实接受的端点）。客户端目录重建
+  必须保留已保存条目的档位（发现/裁剪不得覆盖）。
 - **`snapshot()` 永远不输出 `undefined` 值**（缺席字段省略属性）：工具管线判非无损
   （`undefined`/`Infinity`/`-0` 都不行）；回归测试用 `isJsonValue`，别用 `JSON.stringify` 断言。
 - **预留时间戳不可重复读取**：`QuotaLease.reservedAt` 必须用 `#tryAcquire` 传入的 `now`
