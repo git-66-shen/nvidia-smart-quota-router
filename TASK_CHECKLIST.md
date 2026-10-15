@@ -131,7 +131,9 @@
 - [x] CONFIG.example.yaml：无真实 Key 的完整配置样例（含 patch 整行替换语义说明）
 - [x] PROJECT_STATUS.md / HANDOFF.md / CHANGELOG.md 与代码一致（2026-10-15 更新）
 - [x] `tests/e2e/{route-default,sticky-threshold}.yml`：headless e2e overlay 固件（无密钥）
-- [ ] 评估为本项目目录建立独立 Git 版本管理并打标签（真机首验已通过，待用户点头）
+- [x] 独立 Git 版本管理建立并打标签（2026-10-15）：`git init`（master 分支；仓库本地身份
+  `liang <liang@localhost>`）→ 首次提交 `5a800c0`（33 文件：8 文档 + bundle 14 + tests 10 +
+  .gitignore）→ 附注标签 **`v0.1.0`**；泄密终检通过（全部 nvapi- 均为测试假标记家族，零真实密钥）
 
 ## 阻塞与未测试事项
 

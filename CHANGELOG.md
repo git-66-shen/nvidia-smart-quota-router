@@ -2,6 +2,14 @@
 
 格式：日期 · 变更 · 原因。只记录有实际意义的阶段与决策。
 
+## 2026-10-15 13:23 · 独立 Git 仓库建立并打 v0.1.0 标签
+
+- 项目目录 `git init`（master 分支；仓库本地身份 `liang <liang@localhost>`，未动全局配置）；
+  首次提交 `5a800c0` 收录全部 33 个文件（8 份文档、bundle 14、tests 10、.gitignore）；
+  附注标签 **`v0.1.0`**（真机全链路验收通过）。
+- 提交前泄密终检：全部 `nvapi-` 出现处均为测试假标记家族（TEST/SECRET/PROBE/HEALTH/
+  EMPTY/WIRING）与前缀断言字符串，零真实密钥；launch token 未出现在任何项目文件中。
+
 ## 2026-10-15 11:41 · 用户 GUI 报 `prepareCall is not a function` → 模块根 HMR 免重启修复
 
 - **症状**：用户在模型列表切到插件模型发消息 → `本轮运行失败 registration.adapter.prepareCall
