@@ -301,7 +301,7 @@ test('adapter: error matrix maps every HTTP status to the harness taxonomy', asy
   }
 })
 
-test('adapter: a stalled stream times out, keeps its count, and retries stay bounded', async () => {
+test('adapter: a request that never gets a response times out on one key and does not fail over', async () => {
   const mock = await startMockNvidia({
     behaviors: Object.fromEntries(Object.values(KEY_VALUES).map(key => [key, { behavior: 'stall' }])),
   })
@@ -310,13 +310,55 @@ test('adapter: a stalled stream times out, keeps its count, and retries stay bou
     const outcome = await collect(adapter, chatRequest(['stall probe']))
     assert.ok(outcome.error instanceof LlmError)
     assert.equal(outcome.error.code, 'TIMEOUT')
-    assert.equal(mock.requests.length, 2, 'one attempt plus one bounded failover attempt')
+    assert.equal(mock.requests.length, 1, 'a timeout is endpoint-wide; serial key retries only multiply the hang')
     const snap = scheduler.snapshot()
     assert.equal(snap.keys[0].windowCount, 1, 'the possibly-consumed request keeps its reservation')
-    assert.equal(snap.keys[1].windowCount, 1, 'the failover attempt keeps its reservation too')
     assert.equal(snap.keys[0].stats.timeouts, 1)
     assert.equal(snap.keys[0].stats.sent, 1)
-    assert.equal(snap.keys[1].stats.timeouts, 1)
+    assert.equal(snap.keys[1].windowCount, 0, 'the other keys stay untouched')
+    assert.equal(snap.keys[1].stats.timeouts, 0)
+  } finally {
+    await mock.close()
+  }
+})
+
+test('adapter: a stream that keeps producing chunks outlives requestTimeoutMs', async () => {
+  const script = []
+  for (let i = 0; i < 20; i++) script.push(sseEvent({ id: '1', choices: [{ delta: { content: `chunk ${i} ` } }] }))
+  script.push(sseEvent({ id: '1', choices: [{ delta: {}, finish_reason: 'stop' }] }))
+  script.push(sseEvent({ id: '1', usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } }))
+  const mock = await startMockNvidia({
+    behaviors: { [KEY_VALUES.NVIDIA_API_KEY_1]: { behavior: 'ok', script, delayMs: 100 } },
+  })
+  try {
+    // 20 chunks 100ms apart stream for ~2s in total, far past the 500ms
+    // request deadline, while never idling anywhere near the watchdog.
+    const { adapter, scheduler } = buildAdapter(mock, { requestTimeoutMs: 500, streamIdleTimeoutMs: 30_000 })
+    const result = await collect(adapter, chatRequest(['long generation']))
+    assert.equal(result.error, undefined)
+    assert.equal(result.finish.reason.kind, 'stop')
+    assert.ok(result.blocks.some(block => block.type === 'text' && block.text.includes('chunk 19')), 'the whole stream was delivered')
+    assert.ok(result.usage !== undefined && result.usage.outputTokens === 20, 'usage carried before finish')
+    const key = scheduler.snapshot().keys[0]
+    assert.equal(key.stats.ok, 1)
+    assert.equal(key.stats.timeouts, 0, 'a healthy long stream is not misreported as a timeout')
+  } finally {
+    await mock.close()
+  }
+})
+
+test('adapter: after headers the request deadline is withdrawn — a silent stream hits the idle watchdog', async () => {
+  const mock = await startMockNvidia({
+    behaviors: { [KEY_VALUES.NVIDIA_API_KEY_1]: { behavior: 'headers-stall' } },
+  })
+  try {
+    const { adapter, scheduler } = buildAdapter(mock, { requestTimeoutMs: 1_000, streamIdleTimeoutMs: 200 })
+    const outcome = await collect(adapter, chatRequest(['silent stream']))
+    assert.ok(outcome.error instanceof LlmError)
+    assert.equal(outcome.error.code, 'TIMEOUT')
+    assert.match(outcome.error.message, /idle/u, 'stream pacing is the idle watchdog\'s domain once headers arrive')
+    assert.equal(mock.requests.length, 1, 'timeouts do not fail over to another key')
+    assert.equal(scheduler.snapshot().keys[0].stats.timeouts, 1)
   } finally {
     await mock.close()
   }

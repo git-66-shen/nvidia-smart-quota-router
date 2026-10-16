@@ -94,6 +94,7 @@ export const Config = z.object({
   allUnavailableWaitMs: z.number().step(1).min(0).max(3_600_000).default(15_000).volatile(),
   streamIdleTimeoutMs: z.number().min(1).default(300_000).volatile(),
   requestTimeoutMs: z.number().step(1).min(0).max(2_147_483_000).default(120_000).volatile(),
+  probeTimeoutMs: z.number().step(1).min(1).max(600_000).default(30_000).volatile(),
   streamUsage: z.boolean().default(true).volatile(),
   enableStatusTool: z.boolean().default(true).volatile(),
   retryPolicy: RetryPolicySchema.volatile(),
@@ -253,6 +254,7 @@ export function resolveAdapterOptions(config, environment) {
   const allUnavailableWaitMs = positiveInt(config.allUnavailableWaitMs ?? 15_000, 'allUnavailableWaitMs', 0, 3_600_000)
   const streamIdleTimeoutMs = positiveInt(config.streamIdleTimeoutMs ?? 300_000, 'streamIdleTimeoutMs', 1, 2_147_483_000)
   const requestTimeoutMs = positiveInt(config.requestTimeoutMs ?? 120_000, 'requestTimeoutMs', 0, 2_147_483_000)
+  const probeTimeoutMs = positiveInt(config.probeTimeoutMs ?? 30_000, 'probeTimeoutMs', 1, 600_000)
   const reasoningEffortParam = typeof config.reasoningEffortParam === 'string' && config.reasoningEffortParam.length > 0
     ? config.reasoningEffortParam
     : 'none'
@@ -275,6 +277,7 @@ export function resolveAdapterOptions(config, environment) {
     allUnavailableWaitMs,
     streamIdleTimeoutMs,
     requestTimeoutMs,
+    probeTimeoutMs,
     streamUsage: config.streamUsage !== false,
     enableStatusTool: config.enableStatusTool !== false,
     reasoningEffortParam,

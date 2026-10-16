@@ -101,7 +101,7 @@ export class QuotaLease {
     const options = this.#options()
     const backoff = options.rateLimitCooldownMs * 2 ** (this.key.consecutiveRateLimits - 1)
     const cooldown = Math.min(backoff, options.rateLimitCooldownMaxMs)
-    const delay = Number.isFinite(retryAfterMs) && retryAfterMs !== undefined && retryAfterMs > 0
+    const delay = Number.isFinite(retryAfterMs) && retryAfterMs > 0
       ? retryAfterMs
       : cooldown
     this.key.cooldownUntil = this.#clock() + delay

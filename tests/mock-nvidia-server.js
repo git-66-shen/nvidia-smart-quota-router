@@ -160,6 +160,13 @@ export async function startMockNvidia(options = {}) {
         case 'stall':
           // Never respond; the client's idle watchdog must fire.
           return
+        case 'headers-stall':
+          // Respond with headers, then never write a body chunk: the request
+          // deadline is withdrawn once headers arrive, so the client's idle
+          // watchdog (not the request deadline) owns a silent stream.
+          res.writeHead(200, headers)
+          res.flushHeaders()
+          return
         case 'empty': {
           res.writeHead(200, headers)
           res.write(sseEvent({ id: '1', choices: [{ delta: {}, finish_reason: 'stop' }] }))

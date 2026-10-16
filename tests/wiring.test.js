@@ -78,6 +78,7 @@ test('wiring: the Config schema validates and defaults a minimal row', () => {
   assert.equal(resolved.safeThreshold, 38)
   assert.equal(resolved.windowMs, 60_000)
   assert.equal(resolved.maxFailoverAttempts, 2)
+  assert.equal(resolved.probeTimeoutMs, 30_000)
   assert.equal(resolved.retryPolicy.mode, 'normal')
   assert.equal(resolved.retryPolicy.maxRetries, 5)
   assert.deepEqual([...resolved.retryPolicy.retryableCodes], [
@@ -92,6 +93,7 @@ test('wiring: the resolver re-validates values that bypassed the schema', () => 
   assert.throws(() => resolveAdapterOptions({ apiKeys: [{ env: 'A' }, { env: 'A' }] }, undefined), /duplicate/)
   assert.throws(() => resolveAdapterOptions({ apiKeys, models: [{ id: '' }] }, undefined), /non-empty/)
   assert.throws(() => resolveAdapterOptions({ apiKeys, baseURL: 'ftp://x/y?z' }, undefined), /HTTP\(S\) root/)
+  assert.throws(() => resolveAdapterOptions({ apiKeys, probeTimeoutMs: 0 }, undefined), /probeTimeoutMs/)
 })
 
 test('wiring: catalog reasoning levels validate and a default must name a declared level', () => {

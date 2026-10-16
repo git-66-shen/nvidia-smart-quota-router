@@ -152,7 +152,7 @@ export class NvidiaRouterAdapter extends LlmAdapter {
         this.#report(lease, failure)
         if (failure.code === 'TIMEOUT' || failure.code === 'TRANSPORT') {
           // A transient transport failure says nothing about the key's quota;
-          // cool nothing, but prefer another key for the immediate retry.
+          // cool nothing, but let the next request prefer another key.
           this.#scheduler.advanceStickyPast(lease.key)
         }
         // Failover only before anything reached the consumer: resending a
@@ -252,16 +252,22 @@ export class NvidiaRouterAdapter extends LlmAdapter {
     const { url, headers, body } = serializeRequest(options, connection, apiKey)
     watchdog.signal.throwIfAborted()
     flight.sent = true
-    // The idle watchdog only guards stream pulls; the fetch itself needs its
-    // own deadline so a server that accepts but never responds cannot hang.
-    using requestWatch = deadline(watchdog.signal, connection.requestTimeoutMs, REQUEST_CODE)
-    const response = await fetch(url, { method: 'POST', headers, body, signal: requestWatch.signal, redirect: 'error' })
-    if (!response.ok) {
-      const text = await response.text()
-      throw classifyHttpError(response.status, text, response.headers)
-    }
-    if (response.body === null) {
-      throw new LlmError(`${PKG}: NVIDIA chat/completions returned no response body`, 'EMPTY_RESPONSE')
+    // The idle watchdog only guards stream pulls. This deadline covers waiting
+    // for the response to resolve — headers plus the error-body verdict — so a
+    // server that accepts but never responds cannot hang. It is withdrawn once
+    // the response resolves: stream pacing is then the idle watchdog's alone,
+    // and a healthy generation is never cut mid-stream by the request deadline.
+    let response
+    {
+      using requestWatch = deadline(watchdog.signal, connection.requestTimeoutMs, REQUEST_CODE)
+      response = await fetch(url, { method: 'POST', headers, body, signal: requestWatch.signal, redirect: 'error' })
+      if (!response.ok) {
+        const text = await response.text()
+        throw classifyHttpError(response.status, text, response.headers)
+      }
+      if (response.body === null) {
+        throw new LlmError(`${PKG}: NVIDIA chat/completions returned no response body`, 'EMPTY_RESPONSE')
+      }
     }
     const iterator = translateSse(response.body)
     while (true) {

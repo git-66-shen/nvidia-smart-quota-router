@@ -19,11 +19,10 @@ export const PROBE_PATH = '/api/nvidia-router.probe'
 /** Exact route the header badge polls for the configured-key count and verdict. */
 export const STATUS_PATH = '/api/nvidia-router.status'
 
-// A model that answers at all answers in about a second, so ten seconds is
-// already generous; the shorter budget is what keeps a whole-catalog pass
-// bearable, since a slow entry now costs its own ten seconds instead of
-// stalling the batch. What a timeout leaves is "undetermined", never "unusable".
-const PROBE_TIMEOUT_MS = 10_000
+// A model that answers at all answers well inside the configured probe budget;
+// the budget is deployment-tunable (`probeTimeoutMs`) because a congested
+// endpoint's time-to-first-response can legitimately exceed a small fixed
+// value — what a timeout leaves is "undetermined", never "unusable".
 const PROBE_CONCURRENCY = 6
 
 /**
@@ -169,13 +168,14 @@ export async function handleProbe({ request, options, resolveAnyKey }) {
     })
   }
   const baseURL = snapshot.baseURL.replace(/\/+$/u, '')
+  const probeTimeoutMs = snapshot.probeTimeoutMs
   // One budget per model, not one shared by the whole pass: a batch-wide
   // deadline cuts off whatever is still queued once the first slow model burns
   // it, which would report a large catalog as mostly "undetermined". Caller
   // cancellation still applies to every probe.
   const results = await mapWithConcurrency(models, PROBE_CONCURRENCY, (model) => probeModel({
     model, baseURL, key, reasoningEffort,
-    signal: AbortSignal.any([request.signal, AbortSignal.timeout(PROBE_TIMEOUT_MS)]),
+    signal: AbortSignal.any([request.signal, AbortSignal.timeout(probeTimeoutMs)]),
   }))
   return jsonResponse({ testedAt: Date.now(), baseURL, ...(reasoningEffort === undefined ? {} : { reasoningEffort }), results })
 }
@@ -208,7 +208,7 @@ export function computeHealth(keys) {
  * @returns {Promise<Response>} the redacted health view.
  */
 export async function handleStatus({ scheduler, keyConfigured }) {
-  scheduler.syncKeys?.()
+  scheduler.syncKeys()
   const snapshot = scheduler.snapshot()
   const keys = await Promise.all(snapshot.keys.map(async (key) => ({
     label: key.label,
@@ -221,6 +221,7 @@ export async function handleStatus({ scheduler, keyConfigured }) {
     ok: key.stats.ok,
     rateLimited: key.stats.rateLimited,
     authErrors: key.stats.authErrors,
+    timeouts: key.stats.timeouts,
   })))
   return jsonResponse({
     keyCount: keys.filter((key) => key.configured).length,

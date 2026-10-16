@@ -120,7 +120,10 @@ acquire(model, signal):
 - 请求体：`model`、`messages`、`stream:true`、`stream_options:{include_usage:true}`（可关）、`tools`/`tool_choice:'auto'`（有 tools 时）、`temperature`、`max_tokens`、`stop`。
 - 消息映射：system/developer→`system`；user→`user`（文本块连接）；assistant→`assistant`（tool-call 块→`tool_calls`，reasoning 块不回传，符合 provider 惯例）；tool 结果→`tool`（`tool_call_id`）。文件/图像由运行时在送达前投影为占位文本（v1 声明纯文本模态）。
 - 流翻译：`data: {...}` 行 → delta.content（text-delta）/ delta.reasoning_content|reasoning（reasoning-delta）/ delta.tool_calls[i]（首见序分配块 index，id/name/arguments 增量，arguments 保持原始 JSON 字符串拼接）；`data: [DONE]` 或流结束 → 缓冲式冲刷 usage（最终块携带时）→ finish；finish_reason 映射 stop/tool_calls/length→stop/tool-calls/max-tokens，content_filter→`finish{error, CONTENT_FILTERED}`；零内容块完成 → `EMPTY_RESPONSE`；带内 `{error:...}` → `finish{error}`。
-- 超时：流空闲 `streamIdleTimeoutMs`（idleWatchdog）→ TIMEOUT（计数保留，按可能已消耗处理）。
+- 超时：`requestTimeoutMs` 只守卫**等待响应**（头部 + 错误体判定），头部到达即撤除；
+  流空闲 `streamIdleTimeoutMs`（idleWatchdog）→ TIMEOUT（计数保留，按可能已消耗处理）。
+  二者职责分界是刻意的：健康的长生成只受空闲守卫约束，不会被总死线掐断
+  （2026-10-16 修复：此前 requestTimeoutMs 覆盖整个流式期，120s 默认会杀死长生成）。
 
 ## 5. 配置（全部 cordis.yml 可调，无硬编码调参）
 

@@ -12,7 +12,12 @@ import { isContextWindowExceededError, isQuotaExceededError, LlmError } from '@d
  * key-scoped or transient classes only. Deterministic request-level failures
  * (bad arguments, unknown model, context overflow) and account-level quota
  * exhaustion never fail over, because another key reproduces the same
- * outcome or burns a shared balance.
+ * outcome or burns a shared balance. TIMEOUT is excluded even though it is
+ * transient: the endpoint and its models are shared by every key, so a
+ * serial retry only multiplies the wall-clock hang (each attempt waits out
+ * the full request deadline) and burns extra reservations without changing
+ * the outcome. The next request still starts on another key via
+ * advanceStickyPast, and step-level retry owns any later reattempt.
  */
 export const FAILOVER_ELIGIBLE = new Set([
   'RATE_LIMIT',
@@ -20,7 +25,6 @@ export const FAILOVER_ELIGIBLE = new Set([
   'MISSING_CREDENTIAL',
   'INVALID_CREDENTIAL',
   'SERVER',
-  'TIMEOUT',
   'TRANSPORT',
   'EMPTY_RESPONSE',
 ])

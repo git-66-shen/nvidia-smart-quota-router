@@ -64,6 +64,9 @@ inode）→ 原地重写 adapter.js（内容不变，`cp` 两次经过以真正�
 
 ## 下一步（按序）
 
+0. **项目进入维护模式（2026-10-17）**：功能已满足需求，暂停迭代升级；后续仅在
+   使用中发现 bug 时修复。已上线配置：`requestTimeoutMs=300000`、`probeTimeoutMs=120000`、
+   `retryPolicy.maxRetries=2`（用户 profile，应对端点 TTFT 劣化，见 CHANGELOG 2026-10-16 两条）。
 1. **无阻塞待办**。可选决策：是否把 `agent-default-model` 也切到
    `nvidia-router / z-ai/glm-5.3-flash`（README「迁移到本路由」；**必须删除 `reasoningEffort: high``**）。
    现状：用户可随时在模型列表里按会话选择插件模型（已实测可用），迁移只是改「新会话默认」。
@@ -81,7 +84,13 @@ inode）→ 原地重写 adapter.js（内容不变，`cp` 两次经过以真正�
 
 ## 不应该重复做的工作 / 不可破坏的约束
 
-- **不要重写调度/适配器**（70 项测试通过 + 真机 e2e + GUI 实证）；改动后 `sh tests/run.sh` 全量回归。
+- **不要重写调度/适配器**（75 项测试通过 + 真机 e2e + GUI 实证）；改动后 `sh tests/run.sh` 全量回归。
+- **超时分界（2026-10-16 起）**：`requestTimeoutMs` 只守卫「等待响应」（fetch + 状态/错误体判定），
+  头部到达即撤除；流式节奏只归 `streamIdleTimeoutMs`。不要把请求死线拉回覆盖整个流式期——
+  那会掐断健康长生成（glm-5.3 高推理档实测 >120s，曾致 55 次 timeout 超时风暴，见 CHANGELOG）。
+- **TIMEOUT 不跨 Key 故障转移（2026-10-16 起）**：`FAILOVER_ELIGIBLE` 不含 TIMEOUT；
+  超时只 `advanceStickyPast`（下一次请求换起点），不在同一请求内串行重试——慢端点换 Key
+  只会把挂起放大成 N×requestTimeoutMs 并烧多份预留。429/5xx/凭据类的转移语义不变。
 - **适配器必须继承 `LlmAdapter`**（`@deepseek-ai/dsh-llm`）：请求准备期走基类 `prepareCall`
   的同代绑定；构造器必须先 `super()`。不要改回鸭子类型裸类。
 - **推理档位（2026-10-15 起）**：目录条目 `efforts`/`defaultEffort` 是部署知识（端点列表

@@ -1,6 +1,6 @@
 #!/bin/sh
 # NVIDIA Smart Quota Router 测试入口。
-# 运行全部 70 项自动化测试（模拟 NVIDIA 端点，不接触真实 API、不消耗任何配额）。
+# 运行全部 75 项自动化测试（模拟 NVIDIA 端点，不接触真实 API、不消耗任何配额）。
 #
 # 前提：本目录位于 DSH 源码检出内（测试通过祖先链解析真实 @deepseek-ai/* 工作区包，
 # 并经 tsx 加载其 TS 源码），且存在 Node >= 22 与检出根的依赖。

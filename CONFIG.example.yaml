@@ -67,7 +67,8 @@
     quotaCooldownMs: 1800000      # 402/配额文案：账户级配额冷却（可能跨 Key 共享）
 
     # ---- 超时（毫秒） ----
-    requestTimeoutMs: 120000     # 单个 HTTP 请求整体截止（0=禁用）
+    requestTimeoutMs: 120000     # 等待响应（头部+错误体判定）的截止（0=禁用）；头部到达即撤除，流式节奏由 streamIdleTimeoutMs 守卫
+    probeTimeoutMs: 30000       # 「测试所有模型」单模型探测预算（慢端点调大，如 120000；超时=「未确定」不裁剪）
     streamIdleTimeoutMs: 300000   # 流式输出两个数据块之间的最大空闲
 
     # ---- 其他 ----

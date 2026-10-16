@@ -87,9 +87,15 @@ test('classifyHttpError: retry-after seconds and request id attach to the failur
 
 test('parseRetryAfterMs: seconds, HTTP-date, and invalid values', () => {
   assert.equal(parseRetryAfterMs(headers({ 'retry-after': '2.5' })), 2_500)
-  const date = new Date(Date.now() + 60_000).toUTCString()
-  const parsed = parseRetryAfterMs(headers({ 'retry-after': date }))
-  assert.ok(parsed > 59_000 && parsed <= 60_000, `HTTP-date parsed near 60s (got ${parsed})`)
+  // The date is parsed against a second clock read, and toUTCString truncates
+  // to whole seconds, so the exact value depends on the read gap plus up to one
+  // second of truncation; bound it by both instead of a fixed window that a
+  // scheduler pause can break.
+  const before = Date.now()
+  const parsed = parseRetryAfterMs(headers({ 'retry-after': new Date(before + 60_000).toUTCString() }))
+  const after = Date.now()
+  assert.ok(parsed !== undefined && parsed <= 60_000 && parsed >= 60_000 - 1_000 - (after - before),
+    `HTTP-date parsed near 60s (got ${parsed}, clock gap ${after - before}ms)`)
   assert.equal(parseRetryAfterMs(headers({ 'retry-after': 'soon' })), undefined)
   assert.equal(parseRetryAfterMs(headers({ 'retry-after': '-3' })), undefined)
   assert.equal(parseRetryAfterMs(headers({})), undefined)
@@ -112,10 +118,12 @@ test('classifyTransportError: undici fetch failures are TRANSPORT; deadlines are
 })
 
 test('FAILOVER_ELIGIBLE: key-scoped and transient classes only', () => {
-  for (const code of ['RATE_LIMIT', 'AUTH', 'MISSING_CREDENTIAL', 'SERVER', 'TIMEOUT', 'TRANSPORT', 'EMPTY_RESPONSE']) {
+  for (const code of ['RATE_LIMIT', 'AUTH', 'MISSING_CREDENTIAL', 'SERVER', 'TRANSPORT', 'EMPTY_RESPONSE']) {
     assert.ok(FAILOVER_ELIGIBLE.has(code), `${code} may fail over`)
   }
-  for (const code of ['INVALID_REQUEST', 'CONTEXT_WINDOW_EXCEEDED', 'QUOTA', 'HTTP_404', 'UNSUPPORTED_OPTION', 'CONTENT_FILTERED']) {
+  // TIMEOUT is endpoint-wide, not key-scoped: a serial retry only multiplies
+  // the hang, so it must never fail over within the same request.
+  for (const code of ['TIMEOUT', 'INVALID_REQUEST', 'CONTEXT_WINDOW_EXCEEDED', 'QUOTA', 'HTTP_404', 'UNSUPPORTED_OPTION', 'CONTENT_FILTERED']) {
     assert.ok(!FAILOVER_ELIGIBLE.has(code), `${code} never fails over`)
   }
 })
